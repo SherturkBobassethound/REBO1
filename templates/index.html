@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Company Database App</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 1000px; margin: 0 auto; padding: 20px; }
+        .container { display: flex; gap: 20px; }
+        .input-section, .summary-section { flex: 1; }
+        form { margin-bottom: 20px; }
+        input, textarea { width: 100%; margin-bottom: 10px; padding: 5px; }
+        button { padding: 10px; cursor: pointer; }
+        #searchResults, #fileSummary { margin-top: 20px; border: 1px solid #ccc; padding: 10px; min-height: 100px; }
+    </style>
+</head>
+<body>
+    <h1>Company Database App</h1>
+    
+    <div class="container">
+        <div class="input-section">
+            <h2>Add Document</h2>
+            <form id="addDocumentForm">
+                <input type="text" id="title" placeholder="Document Title" required>
+                <textarea id="content" placeholder="Document Content" required></textarea>
+                <input type="file" id="file" style="display: none;">
+                <button type="button" onclick="document.getElementById('file').click()">Choose File</button>
+                <span id="fileName"></span>
+                <button type="button" onclick="summarizeFile()">Summarize File</button>
+                <button type="submit">Add Document</button>
+            </form>
+
+            <h2>Search Documents</h2>
+            <input type="text" id="searchQuery" placeholder="Enter search query">
+            <button onclick="searchDocuments()">Search</button>
+
+            <div id="searchResults"></div>
+        </div>
+        
+        <div class="summary-section">
+            <h2>File Summary</h2>
+            <div id="fileSummary"></div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('file').addEventListener('change', function(e) {
+            document.getElementById('fileName').textContent = this.files[0] ? this.files[0].name : '';
+        });
+
+        function summarizeFile() {
+            let fileInput = document.getElementById('file');
+            if (fileInput.files.length === 0) {
+                alert('Please select a file first.');
+                return;
+            }
+
+            let file = fileInput.files[0];
+            if (!file.type.startsWith('text/')) {
+                alert('Please upload a text file.');
+                return;
+            }
+
+            let reader = new FileReader();
+
+            reader.onload = function(e) {
+                let content = e.target.result;
+                let formData = new FormData();
+                formData.append('content', content);
+
+                fetch('http://127.0.0.1:5000/summarize', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to summarize the file.');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    document.getElementById('fileSummary').innerHTML = `<h3>Summary</h3><p>${data.summary}</p>`;
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    document.getElementById('fileSummary').innerHTML = '<p>An error occurred while summarizing the file.</p>';
+                });
+            };
+
+            reader.onerror = function() {
+                alert('An error occurred while reading the file.');
+            };
+
+            reader.readAsText(file);
+        }
+
+        document.getElementById('addDocumentForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            let formData = new FormData();
+            formData.append('title', document.getElementById('title').value);
+            formData.append('content', document.getElementById('content').value);
+            
+            let fileInput = document.getElementById('file');
+            if (fileInput.files.length > 0) {
+                formData.append('file', fileInput.files[0]);
+            }
+
+            fetch('http://127.0.0.1:5000/add_document', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed to add document.');
+                }
+                return response.json();
+            })
+            .then(data => {
+                alert(data.message);
+                document.getElementById('addDocumentForm').reset();
+                document.getElementById('fileName').textContent = '';
+                document.getElementById('fileSummary').innerHTML = '';
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while adding the document.');
+            });
+        });
+
+        function searchDocuments() {
+            let query = document.getElementById('searchQuery').value;
+            
+            fetch(`http://127.0.0.1:5000/search?query=${encodeURIComponent(query)}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed to search documents.');
+                }
+                return response.json();
+            })
+            .then(data => {
+                let resultsDiv = document.getElementById('searchResults');
+                resultsDiv.innerHTML = '';
+                if (Array.isArray(data)) {
+                    data.forEach(item => {
+                        resultsDiv.innerHTML += `<h3>${item.title}</h3><p>${item.summary}</p>`;
+                    });
+                } else {
+                    resultsDiv.innerHTML = `<p>${data.message}</p>`;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('searchResults').innerHTML = '<p>An error occurred while searching for documents.</p>';
+            });
+        }
+    </script>
+</body>
+</html>
